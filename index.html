@@ -67,7 +67,6 @@
       padding: 16px;
     }
     .chart-inner {
-      min-width: 1400px;
       height: 520px;
     }
     .tooltip-table {
@@ -99,6 +98,62 @@
     }
     td:first-child { text-align: left; }
     tr:hover td { background: #1f3460; }
+    .slab-section {
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    .slab-table {
+      border: 1px solid #333;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .slab-table table {
+      font-size: 0.82rem;
+    }
+    .slab-table th {
+      background: #0f3460;
+      font-size: 0.75rem;
+      padding: 6px 8px;
+    }
+    .slab-table td {
+      padding: 4px 6px;
+    }
+    .slab-table input {
+      width: 90px;
+      padding: 3px 6px;
+      font-size: 0.85rem;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background: #16213e;
+      color: #eee;
+      text-align: center;
+    }
+    .range-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .range-box label {
+      font-size: 0.8rem;
+      color: #888;
+      text-transform: uppercase;
+    }
+    .range-box input {
+      width: 70px;
+      padding: 5px 8px;
+      font-size: 0.95rem;
+      border-radius: 6px;
+      border: 1px solid #e94560;
+      background: #16213e;
+      color: #eee;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -136,6 +191,38 @@
     </div>
   </div>
   <div class="info-box">All values update the graph in real-time.</div>
+  <div class="info-box" style="max-width:700px; margin:0 auto 12px; text-align:left; line-height:1.5;">
+    <strong style="color:#e94560;">Note 1:</strong> Std Deduction, Rebate, Cess, Slabs — these are all govt-controlled values. No need to change them unless new tax laws are announced. This is just here for future updates.<br>
+    <strong style="color:#e94560;">Note 2:</strong> Monthly PF is one-sided (employee OR employer contribution, not both combined). Fill it as per your actual deduction shown in your payslip/ERP.<br>
+    <strong style="color:#e94560;">Note 3:</strong> Pluxee card might be an optional thing for you — set it to 0 if it doesn't apply.
+  </div>
+
+  <div class="slab-section">
+    <div class="slab-table">
+      <table>
+        <thead>
+          <tr><th>Slab Upper Limit (₹)</th><th>Rate (%)</th></tr>
+        </thead>
+        <tbody id="slabBody">
+          <tr><td><input type="text" class="slab-limit" value="400000"></td><td><input type="text" class="slab-rate" value="0"></td></tr>
+          <tr><td><input type="text" class="slab-limit" value="800000"></td><td><input type="text" class="slab-rate" value="5"></td></tr>
+          <tr><td><input type="text" class="slab-limit" value="1200000"></td><td><input type="text" class="slab-rate" value="10"></td></tr>
+          <tr><td><input type="text" class="slab-limit" value="1600000"></td><td><input type="text" class="slab-rate" value="15"></td></tr>
+          <tr><td><input type="text" class="slab-limit" value="2000000"></td><td><input type="text" class="slab-rate" value="20"></td></tr>
+          <tr><td><input type="text" class="slab-limit" value="2400000"></td><td><input type="text" class="slab-rate" value="25"></td></tr>
+          <tr><td>Above</td><td><input type="text" class="slab-rate" value="30"></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="range-box">
+    <label>From</label>
+    <input type="text" id="rangeLow" value="5">
+    <label>L &nbsp;to</label>
+    <input type="text" id="rangeHigh" value="50">
+    <label>L (lakhs)</label>
+  </div>
 
   <div class="chart-wrapper">
     <div class="chart-inner">
@@ -162,15 +249,32 @@
   <script>
     const fmt = n => n.toLocaleString('en-IN');
 
+    function getSlabs() {
+      const limits = document.querySelectorAll('.slab-limit');
+      const rates = document.querySelectorAll('.slab-rate');
+      const slabs = [];
+      for (let i = 0; i < rates.length; i++) {
+        const limit = i < limits.length ? (parseFloat(limits[i].value) || 0) : Infinity;
+        const rate = (parseFloat(rates[i].value) || 0) / 100;
+        slabs.push([limit, rate]);
+      }
+      // Last slab is always Infinity
+      slabs[slabs.length - 1][0] = Infinity;
+      return slabs;
+    }
+
     function getParams() {
       return {
-        pfMonthly: parseInt(document.getElementById('pfSelect').value),
-        profTax: parseInt(document.getElementById('profTaxSelect').value),
-        giftCard: parseInt(document.getElementById('giftCardSelect').value),
-        stdDeduction: parseFloat(document.getElementById('stdDeduction').value) || 75000,
-        rebateLimit: parseFloat(document.getElementById('rebateLimit').value) || 1200000,
-        rebateAmount: parseFloat(document.getElementById('rebateAmount').value) || 60000,
-        cess: (parseFloat(document.getElementById('cessRate').value) || 4) / 100,
+        pfMonthly: parseFloat(document.getElementById('pfSelect').value) || 0,
+        profTax: parseFloat(document.getElementById('profTaxSelect').value) || 0,
+        giftCard: parseFloat(document.getElementById('giftCardSelect').value) || 0,
+        stdDeduction: parseFloat(document.getElementById('stdDeduction').value) || 0,
+        rebateLimit: parseFloat(document.getElementById('rebateLimit').value) || 0,
+        rebateAmount: parseFloat(document.getElementById('rebateAmount').value) || 0,
+        cess: (parseFloat(document.getElementById('cessRate').value) || 0) / 100,
+        slabs: getSlabs(),
+        rangeLow: parseInt(document.getElementById('rangeLow').value) || 1,
+        rangeHigh: parseInt(document.getElementById('rangeHigh').value) || 50,
       };
     }
 
@@ -181,18 +285,8 @@
       if (taxableIncome < 0) taxableIncome = 0;
 
       let tax = 0;
-      const slabs = [
-        [400000, 0],
-        [800000, 0.05],
-        [1200000, 0.10],
-        [1600000, 0.15],
-        [2000000, 0.20],
-        [2400000, 0.25],
-        [Infinity, 0.30],
-      ];
-
       let prevLimit = 0;
-      for (let [limit, rate] of slabs) {
+      for (let [limit, rate] of p.slabs) {
         if (taxableIncome > prevLimit) {
           const incomeInSlab = Math.min(taxableIncome, limit) - prevLimit;
           tax += incomeInSlab * rate;
@@ -221,12 +315,13 @@
       };
     }
 
-    // Generate data from 5L to 50L
     function generateData(p) {
       const labels = [];
       const netMonthlyData = [];
       const fullData = [];
-      for (let lakh = 5; lakh <= 50; lakh++) {
+      const lo = Math.max(1, p.rangeLow);
+      const hi = Math.max(lo, p.rangeHigh);
+      for (let lakh = lo; lakh <= hi; lakh++) {
         const gross = lakh * 100000;
         const result = calculateTax(gross, p);
         labels.push(lakh + 'L');
@@ -324,16 +419,29 @@
 
     renderTable(fullData);
 
+    function updateChartWidth(points) {
+      const inner = document.querySelector('.chart-inner');
+      // 30px per point, minimum 1200px
+      inner.style.minWidth = Math.max(1200, points * 30) + 'px';
+    }
+
     // Any control change — real-time refresh
     function refresh() {
-      const result = generateData(getParams());
+      const p = getParams();
+      const result = generateData(p);
       fullData = result.fullData;
+      chart.data.labels = result.labels;
       chart.data.datasets[0].data = result.netMonthlyData;
+      updateChartWidth(result.labels.length);
       chart.update();
       renderTable(fullData);
     }
 
-    document.querySelectorAll('.controls input').forEach(el => el.addEventListener('input', refresh));
+    updateChartWidth(labels.length);
+
+    document.querySelectorAll('.controls input, .slab-table input, .range-box input').forEach(
+      el => el.addEventListener('input', refresh)
+    );
   </script>
 
 </body>
