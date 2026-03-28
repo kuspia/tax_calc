@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Net Monthly Income vs Total Package</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 8px;
+      font-size: 1.5rem;
+      color: #e94560;
+    }
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .ctrl-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .ctrl-group label {
+      font-size: 0.75rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .ctrl-group select, .ctrl-group input {
+      padding: 6px 10px;
+      font-size: 0.95rem;
+      border-radius: 6px;
+      border: 1px solid #e94560;
+      background: #16213e;
+      color: #eee;
+      cursor: pointer;
+      width: 140px;
+      text-align: center;
+    }
+    .ctrl-group input {
+      cursor: text;
+    }
+    .info-box {
+      text-align: center;
+      margin-bottom: 12px;
+      font-size: 0.8rem;
+      color: #666;
+    }
+    .chart-wrapper {
+      overflow-x: auto;
+      overflow-y: hidden;
+      border: 1px solid #333;
+      border-radius: 10px;
+      background: #16213e;
+      padding: 16px;
+    }
+    .chart-inner {
+      min-width: 1400px;
+      height: 520px;
+    }
+    .tooltip-table {
+      margin-top: 16px;
+      width: 100%;
+      max-height: 400px;
+      overflow-y: auto;
+      border-radius: 10px;
+      border: 1px solid #333;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    th {
+      background: #e94560;
+      color: #fff;
+      padding: 8px 10px;
+      position: sticky;
+      top: 0;
+      text-align: right;
+    }
+    th:first-child { text-align: left; }
+    td {
+      padding: 6px 10px;
+      border-bottom: 1px solid #2a2a4a;
+      text-align: right;
+    }
+    td:first-child { text-align: left; }
+    tr:hover td { background: #1f3460; }
+  </style>
+</head>
+<body>
+
+  <h1>Net Monthly Income vs Total Package (New Tax Regime)</h1>
+
+  <div class="controls">
+    <div class="ctrl-group">
+      <label>Monthly PF (₹)</label>
+      <input type="text" id="pfSelect" value="1800">
+    </div>
+    <div class="ctrl-group">
+      <label>Prof Tax /mo (₹)</label>
+      <input type="text" id="profTaxSelect" value="300">
+    </div>
+    <div class="ctrl-group">
+      <label>Pluxee Card /mo (₹)</label>
+      <input type="text" id="giftCardSelect" value="417">
+    </div>
+    <div class="ctrl-group">
+      <label>Std Deduction (₹)</label>
+      <input type="text" id="stdDeduction" value="75000">
+    </div>
+    <div class="ctrl-group">
+      <label>Rebate Limit (₹)</label>
+      <input type="text" id="rebateLimit" value="1200000">
+    </div>
+    <div class="ctrl-group">
+      <label>Rebate Amount (₹)</label>
+      <input type="text" id="rebateAmount" value="60000">
+    </div>
+    <div class="ctrl-group">
+      <label>Cess (%)</label>
+      <input type="text" id="cessRate" value="4" style="width:80px;">
+    </div>
+  </div>
+  <div class="info-box">All values update the graph in real-time.</div>
+
+  <div class="chart-wrapper">
+    <div class="chart-inner">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+  <div class="tooltip-table">
+    <table>
+      <thead>
+        <tr>
+          <th>Package (₹ LPA)</th>
+          <th>Gross Monthly</th>
+          <th>Taxable Income</th>
+          <th>Yearly Tax</th>
+          <th>Monthly Tax</th>
+          <th>Net Monthly</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const fmt = n => n.toLocaleString('en-IN');
+
+    function getParams() {
+      return {
+        pfMonthly: parseInt(document.getElementById('pfSelect').value),
+        profTax: parseInt(document.getElementById('profTaxSelect').value),
+        giftCard: parseInt(document.getElementById('giftCardSelect').value),
+        stdDeduction: parseFloat(document.getElementById('stdDeduction').value) || 75000,
+        rebateLimit: parseFloat(document.getElementById('rebateLimit').value) || 1200000,
+        rebateAmount: parseFloat(document.getElementById('rebateAmount').value) || 60000,
+        cess: (parseFloat(document.getElementById('cessRate').value) || 4) / 100,
+      };
+    }
+
+    function calculateTax(grossSalary, p) {
+      const PF = p.pfMonthly * 12;
+
+      let taxableIncome = grossSalary - PF - p.stdDeduction;
+      if (taxableIncome < 0) taxableIncome = 0;
+
+      let tax = 0;
+      const slabs = [
+        [400000, 0],
+        [800000, 0.05],
+        [1200000, 0.10],
+        [1600000, 0.15],
+        [2000000, 0.20],
+        [2400000, 0.25],
+        [Infinity, 0.30],
+      ];
+
+      let prevLimit = 0;
+      for (let [limit, rate] of slabs) {
+        if (taxableIncome > prevLimit) {
+          const incomeInSlab = Math.min(taxableIncome, limit) - prevLimit;
+          tax += incomeInSlab * rate;
+          prevLimit = limit;
+        } else break;
+      }
+
+      if (taxableIncome <= p.rebateLimit) {
+        tax = Math.max(0, tax - p.rebateAmount);
+      }
+
+      const cess = tax * p.cess;
+      const yearlyTax = tax + cess;
+
+      const ur_pf = p.pfMonthly;
+      const netYearly = grossSalary - PF - yearlyTax - 12 * (ur_pf + p.profTax + p.giftCard);
+      const netMonthly = netYearly / 12;
+
+      return {
+        grossYearly: grossSalary,
+        taxableIncome: Math.round(taxableIncome),
+        yearlyTax: Math.round(yearlyTax),
+        monthlyTax: Math.round(yearlyTax / 12),
+        netYearly: Math.round(netYearly),
+        netMonthly: Math.round(netMonthly),
+      };
+    }
+
+    // Generate data from 5L to 50L
+    function generateData(p) {
+      const labels = [];
+      const netMonthlyData = [];
+      const fullData = [];
+      for (let lakh = 5; lakh <= 50; lakh++) {
+        const gross = lakh * 100000;
+        const result = calculateTax(gross, p);
+        labels.push(lakh + 'L');
+        netMonthlyData.push(result.netMonthly);
+        fullData.push(result);
+      }
+      return { labels, netMonthlyData, fullData };
+    }
+
+    // Chart setup
+    const ctx = document.getElementById('chart').getContext('2d');
+    let { labels, netMonthlyData, fullData } = generateData(getParams());
+
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Net Monthly Income (₹)',
+          data: netMonthlyData,
+          borderColor: '#e94560',
+          backgroundColor: 'rgba(233, 69, 96, 0.15)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 4,
+          pointHoverRadius: 7,
+          pointBackgroundColor: '#e94560',
+          borderWidth: 2.5,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { intersect: false, mode: 'index' },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              title: () => '',
+              label: item => {
+                const d = fullData[item.dataIndex];
+                return [
+                  'grossYearly:    ' + d.grossYearly,
+                  'taxableIncome:  ' + d.taxableIncome,
+                  'yearlyTax:      ' + d.yearlyTax,
+                  'monthlyTax:     ' + d.monthlyTax,
+                  'netYearly:      ' + d.netYearly,
+                  'netMonthly:     ' + d.netMonthly,
+                ];
+              }
+            },
+            backgroundColor: '#16213e',
+            titleColor: '#e94560',
+            bodyColor: '#eee',
+            bodyFont: { family: 'monospace', size: 13 },
+            borderColor: '#e94560',
+            borderWidth: 1,
+            padding: 12,
+            displayColors: false,
+          },
+          legend: {
+            labels: { color: '#ccc', font: { size: 13 } }
+          }
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'Total Package (LPA)', color: '#aaa', font: { size: 13 } },
+            ticks: { color: '#aaa' },
+            grid: { color: '#2a2a4a' }
+          },
+          y: {
+            title: { display: true, text: 'Net Monthly Income (₹)', color: '#aaa', font: { size: 13 } },
+            ticks: {
+              color: '#aaa',
+              callback: v => '₹' + (v >= 100000 ? (v / 100000).toFixed(1) + 'L' : fmt(v))
+            },
+            grid: { color: '#2a2a4a' }
+          }
+        }
+      }
+    });
+
+    function renderTable(data) {
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = data.map(d =>
+        `<tr>
+          <td>${(d.grossYearly / 100000).toFixed(0)}L</td>
+          <td>₹${fmt(Math.round(d.grossYearly / 12))}</td>
+          <td>₹${fmt(d.taxableIncome)}</td>
+          <td>₹${fmt(d.yearlyTax)}</td>
+          <td>₹${fmt(d.monthlyTax)}</td>
+          <td><strong>₹${fmt(d.netMonthly)}</strong></td>
+        </tr>`
+      ).join('');
+    }
+
+    renderTable(fullData);
+
+    // Any control change — real-time refresh
+    function refresh() {
+      const result = generateData(getParams());
+      fullData = result.fullData;
+      chart.data.datasets[0].data = result.netMonthlyData;
+      chart.update();
+      renderTable(fullData);
+    }
+
+    document.querySelectorAll('.controls input').forEach(el => el.addEventListener('input', refresh));
+  </script>
+
+</body>
+</html>
